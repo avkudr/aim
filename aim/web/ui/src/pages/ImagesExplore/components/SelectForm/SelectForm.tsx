@@ -1,41 +1,34 @@
 import React from 'react';
 import { isEmpty } from 'lodash-es';
 
-import {
-  Box,
-  TextField,
-  Checkbox,
-  Divider,
-  InputBase,
-  Popper,
-} from '@material-ui/core';
+import { Box, Checkbox, Divider, InputBase, Popper } from '@material-ui/core';
 import Autocomplete from '@material-ui/lab/Autocomplete';
 import {
   CheckBox as CheckBoxIcon,
   CheckBoxOutlineBlank,
-  SearchOutlined,
 } from '@material-ui/icons';
 
 import { Icon, Badge, Button } from 'components/kit';
+import ExpressionAutoComplete from 'components/kit/ExpressionAutoComplete';
 
 import COLORS from 'config/colors/colors';
 
 import useModel from 'hooks/model/useModel';
+import useParamsSuggestions from 'hooks/projectData/useParamsSuggestions';
 
 import projectsModel from 'services/models/projects/projectsModel';
 import imagesExploreAppModel from 'services/models/imagesExplore/imagesExploreAppModel';
 
 import { IProjectsModelState } from 'types/services/models/projects/projectsModel';
-import {
-  ISelectMetricsOption,
-  ISelectFormProps,
-} from 'types/pages/imagesExplore/components/SelectForm/SelectForm';
+import { ISelectFormProps } from 'types/pages/imagesExplore/components/SelectForm/SelectForm';
+import { ISelectOption } from 'types/services/models/explorer/createAppModel';
 
 import contextToString from 'utils/contextToString';
 
 import './SelectForm.scss';
 
 function SelectForm({
+  requestIsPending,
   selectedImagesData,
   onImagesExploreSelectChange,
   onSelectRunQueryChange,
@@ -59,27 +52,38 @@ function SelectForm({
 
   function handleSearch(e: React.ChangeEvent<any>): void {
     e.preventDefault();
-
+    if (requestIsPending) {
+      return;
+    }
     searchMetricsRef.current = imagesExploreAppModel.getImagesData(true);
     searchMetricsRef.current.call();
   }
 
-  function onSelect(event: object, value: ISelectMetricsOption[]): void {
+  function handleRequestAbort(e: React.SyntheticEvent): void {
+    e.preventDefault();
+    if (!requestIsPending) {
+      return;
+    }
+    searchMetricsRef.current?.abort();
+    imagesExploreAppModel.abortRequest();
+  }
+
+  function onSelect(event: object, value: ISelectOption[]): void {
     const lookup = value.reduce(
-      (acc: { [key: string]: number }, curr: ISelectMetricsOption) => {
+      (acc: { [key: string]: number }, curr: ISelectOption) => {
         acc[curr.label] = ++acc[curr.label] || 0;
         return acc;
       },
       {},
     );
     onImagesExploreSelectChange(
-      value.filter((option) => lookup[option.label] === 0),
+      value.filter((option: ISelectOption) => lookup[option.label] === 0),
     );
   }
 
   function handleDelete(field: string): void {
-    let fieldData = [...selectedImagesData?.images].filter(
-      (opt: ISelectMetricsOption) => opt.label !== field,
+    let fieldData = [...selectedImagesData?.options].filter(
+      (opt: ISelectOption) => opt.label !== field,
     );
     onImagesExploreSelectChange(fieldData);
   }
@@ -102,8 +106,8 @@ function SelectForm({
     setAnchorEl(null);
   }
 
-  const metricsOptions: ISelectMetricsOption[] = React.useMemo(() => {
-    let data: ISelectMetricsOption[] = [];
+  const metricsOptions: ISelectOption[] = React.useMemo(() => {
+    let data: ISelectOption[] = [];
     let index: number = 0;
     if (projectsData?.images) {
       for (let key in projectsData.images) {
@@ -112,7 +116,7 @@ function SelectForm({
           group: key,
           color: COLORS[0][index % COLORS[0].length],
           value: {
-            metric_name: key,
+            option_name: key,
             context: null,
           },
         });
@@ -126,7 +130,7 @@ function SelectForm({
               group: key,
               color: COLORS[0][index % COLORS[0].length],
               value: {
-                metric_name: key,
+                option_name: key,
                 context: val,
               },
             });
@@ -135,6 +139,7 @@ function SelectForm({
         }
       }
     }
+
     return data;
   }, [projectsData]);
 
@@ -145,6 +150,9 @@ function SelectForm({
 
   const open: boolean = !!anchorEl;
   const id = open ? 'select-metric' : undefined;
+
+  const paramsSuggestions = useParamsSuggestions();
+
   return (
     <div className='SelectForm__container'>
       <div className='SelectForm__metrics__container'>
@@ -157,20 +165,17 @@ function SelectForm({
           >
             {selectedImagesData?.advancedMode ? (
               <div className='SelectForm__textarea'>
-                <TextField
-                  fullWidth
-                  multiline
-                  size='small'
-                  spellCheck={false}
-                  rows={3}
-                  variant='outlined'
-                  placeholder={
-                    'images.name in [“loss”, “accuracy”] and run.learning_rate > 10'
-                  }
-                  value={selectedImagesData?.advancedQuery ?? ''}
-                  onChange={({ target }) =>
-                    onSelectAdvancedQueryChange(target.value)
-                  }
+                <ExpressionAutoComplete
+                  isTextArea={true}
+                  onExpressionChange={onSelectAdvancedQueryChange}
+                  onSubmit={handleSearch}
+                  value={selectedImagesData?.advancedQuery}
+                  placeholder='images.name in [“loss”, “accuracy”] and run.learning_rate > 10'
+                  options={[
+                    'images.name',
+                    'images.context',
+                    ...paramsSuggestions,
+                  ]}
                 />
               </div>
             ) : (
@@ -201,7 +206,7 @@ function SelectForm({
                       disablePortal={true}
                       disableCloseOnSelect
                       options={metricsOptions}
-                      value={selectedImagesData?.images ?? ''}
+                      value={selectedImagesData?.options ?? ''}
                       onChange={onSelect}
                       groupBy={(option) => option.group}
                       getOptionLabel={(option) => option.label}
@@ -224,8 +229,8 @@ function SelectForm({
                       )}
                       renderOption={(option) => {
                         let selected: boolean =
-                          !!selectedImagesData?.images.find(
-                            (item: ISelectMetricsOption) =>
+                          !!selectedImagesData?.options.find(
+                            (item: ISelectOption) =>
                               item.label === option.label,
                           )?.label;
                         return (
@@ -250,28 +255,26 @@ function SelectForm({
                     orientation='vertical'
                     flexItem
                   />
-                  {selectedImagesData?.images.length === 0 && (
+                  {selectedImagesData?.options.length === 0 && (
                     <span className='SelectForm__tags__empty'>
                       No images are selected
                     </span>
                   )}
                   <Box className='SelectForm__tags ScrollBar__hidden'>
-                    {selectedImagesData?.images?.map(
-                      (tag: ISelectMetricsOption) => {
-                        return (
-                          <Badge
-                            size='large'
-                            key={tag.label}
-                            color={tag.color}
-                            label={tag.label}
-                            onDelete={handleDelete}
-                          />
-                        );
-                      },
-                    )}
+                    {selectedImagesData?.options?.map((tag: ISelectOption) => {
+                      return (
+                        <Badge
+                          size='large'
+                          key={tag.label}
+                          color={tag.color}
+                          label={tag.label}
+                          onDelete={handleDelete}
+                        />
+                      );
+                    })}
                   </Box>
                 </Box>
-                {selectedImagesData?.images.length > 1 && (
+                {selectedImagesData?.options.length > 1 && (
                   <span
                     onClick={() => onImagesExploreSelectChange([])}
                     className='SelectForm__clearAll'
@@ -285,18 +288,13 @@ function SelectForm({
         </Box>
         {selectedImagesData?.advancedMode ? null : (
           <div className='SelectForm__TextField'>
-            <form onSubmit={handleSearch}>
-              <TextField
-                fullWidth
-                size='small'
-                variant='outlined'
-                spellCheck={false}
-                inputProps={{ style: { height: '0.687rem' } }}
-                placeholder='Filter runs, e.g. run.learning_rate > 0.0001 and run.batch_size == 32'
-                value={selectedImagesData?.query ?? ''}
-                onChange={({ target }) => onSelectRunQueryChange(target.value)}
-              />
-            </form>
+            <ExpressionAutoComplete
+              onExpressionChange={onSelectRunQueryChange}
+              onSubmit={handleSearch}
+              value={selectedImagesData?.query}
+              options={paramsSuggestions}
+              placeholder='Filter runs, e.g. run.learning_rate > 0.0001 and run.batch_size == 32'
+            />
           </div>
         )}
       </div>
@@ -305,13 +303,18 @@ function SelectForm({
         <Button
           fullWidth
           color='primary'
-          variant='contained'
-          startIcon={<SearchOutlined />}
+          variant={requestIsPending ? 'outlined' : 'contained'}
+          startIcon={
+            <Icon
+              name={requestIsPending ? 'close' : 'search'}
+              fontSize={requestIsPending ? 12 : 14}
+            />
+          }
           className='SelectForm__search__button'
-          onClick={handleSearch}
+          onClick={requestIsPending ? handleRequestAbort : handleSearch}
           disabled={searchButtonDisabled}
         >
-          Search
+          {requestIsPending ? 'Cancel' : 'Search'}
         </Button>
         <div className='SelectForm__search__actions'>
           <Button onClick={handleResetSelectForm} withOnlyIcon={true}>

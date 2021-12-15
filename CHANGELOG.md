@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+- Add ability to track and visualize texts (mihran113, roubkar)
+- Fix boolean values encoding (mahnerak)
+- Add Scatter Explorer to visualize correlations between metric last value and hyperparameter (KaroMourad)
+- Add ability to track and visualize plotly objects (devfox-se, Hamik25, rubenaprikyan)
+- Add ability to query distributions by step range and density (VkoHov, rubenaprikyan)
+- Implement images visualization tab in run detail page (VkoHov, KaroMourad)
+
+## 3.2.2 Dec 10 2021
+
+- Fix Run finalization index timeout issue (alberttorosyan)
+
+## 3.2.1 Dec 8 2021
+
+- Add ability to provide custom base path for API (mihran113, roubkar)
+- Fix table groups column default order (arsengit)
+- Fix table panel height issue in runs explorer page (arsengit)
+
+## 3.2.0 Dec 3 2021
+
+- Add ability to cancel pending request (roubkar, arsengit)
+- Add support for secure protocol for API calls (mihran113, roubkar)
+- Implement image full size view (VkoHov)
+- Add ability to manipulate with image size and rendering type (arsengit)
+- Enhance Table column for selected grouping config options (arsengit)
+- Implement suggestions list for AimQL search (arsengit, rubenaprikyan)
+- Add ability to track and visualize distributions (mihran113, rubenaprikyan)
+- Add notebook extension, magic functions (rubenaprikyan)
+
 ## 3.1.1 Nov 25 2021
 
 - Apply default ordering on images set (VkoHov)

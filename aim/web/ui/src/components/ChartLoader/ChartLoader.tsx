@@ -1,5 +1,4 @@
 import React from 'react';
-import _ from 'lodash-es';
 
 import { Skeleton } from '@material-ui/lab';
 
@@ -15,7 +14,7 @@ function ChartLoader({
       <div className='ChartLoader__chart'>
         <span>Loading...</span>
       </div>
-      {!_.isEmpty(controlsCount) && (
+      {controlsCount ? (
         <div className='ChartLoader__controls'>
           {[...Array(controlsCount)].map((i, index) => (
             <Skeleton
@@ -26,7 +25,7 @@ function ChartLoader({
             />
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import shlex
 
 from aim.cli.configs import VERSION_NAME, UP_NAME
-import aim.ext.manager.manager as manager
+import aim.cli.manager.manager as manager
 
 # Error message prefix for aim commands
 ERROR_MSG_PREFIX = b'Error:'
@@ -36,21 +36,15 @@ def get_execution_context():
         pass
     else:
         ipython = IPython.get_ipython()
-
+        # @TODO find a stable way to get colab context
         if ipython is not None and 'google.colab' in str(ipython):
             # We are in Colab notebook context
             # global _CURRENT_CONTEXT
             # _CURRENT_CONTEXT = _COLAB_EXEC_CONTEXT
             return _COLAB_EXEC_CONTEXT
 
-    # In an IPython command line shell or Jupyter notebook
-    try:
-        import IPython
-    except ImportError:
-        pass
-    else:
-        ipython = IPython.get_ipython()
-        if ipython is not None and ipython.has_trait("kernel"):
+        # In an IPython command line shell or Jupyter notebook
+        elif ipython is not None and ipython.has_trait("kernel"):
             # global _CURRENT_CONTEXT
             # _CURRENT_CONTEXT = _IPYTHON_EXEC_CONTEXT
             return _IPYTHON_EXEC_CONTEXT
@@ -92,8 +86,8 @@ def display_colab(port, display):
     import IPython.display
 
     shell = """
-        (async () => {
-            const url = new URL(await google.colab.kernel.proxyPort({}, {'cache': true}));
+        (async () => {{
+            const url = new URL(await google.colab.kernel.proxyPort({port}, {{'cache': true}}));
             url.searchParams.set('aim', 'true');
             const iframe = document.createElement('iframe');
             iframe.src = url;
@@ -101,8 +95,9 @@ def display_colab(port, display):
             iframe.setAttribute('height', '800');
             iframe.setAttribute('frameborder', 0);
             document.body.appendChild(iframe);
-        })();
-    """.format(port)
+        }})();
+    """.format(port=port)
+
     script = IPython.display.Javascript(shell)
 
     if display:
@@ -183,8 +178,8 @@ def version(options, context):
 # This is why we are not using constants from aim.cli.commands
 # It is possible to add commands outside aim cli
 handlers = {
-    "up": up,
-    "version": version
+    UP_NAME: up,
+    VERSION_NAME: version
 }
 
 
@@ -195,7 +190,7 @@ def execute_magic_aim(line):
     context = get_execution_context()
     command, options = get_argument_options(line)
     # check command existence
-    if command not in (VERSION_NAME, UP_NAME):
+    if command not in handlers:
         print('Invalid operation.')
         return
 

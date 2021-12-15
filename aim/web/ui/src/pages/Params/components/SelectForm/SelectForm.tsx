@@ -1,34 +1,26 @@
 import React from 'react';
 
-import {
-  Box,
-  Checkbox,
-  Divider,
-  InputBase,
-  Popper,
-  TextField,
-} from '@material-ui/core';
+import { Box, Checkbox, Divider, InputBase, Popper } from '@material-ui/core';
 import Autocomplete from '@material-ui/lab/Autocomplete';
 import {
   CheckBox as CheckBoxIcon,
   CheckBoxOutlineBlank,
-  SearchOutlined,
 } from '@material-ui/icons';
 
 import { Badge, Button, Icon, Text } from 'components/kit';
+import ExpressionAutoComplete from 'components/kit/ExpressionAutoComplete';
 
 import COLORS from 'config/colors/colors';
 
 import useModel from 'hooks/model/useModel';
+import useParamsSuggestions from 'hooks/projectData/useParamsSuggestions';
 
 import projectsModel from 'services/models/projects/projectsModel';
 import paramsAppModel from 'services/models/params/paramsAppModel';
 
 import { IProjectsModelState } from 'types/services/models/projects/projectsModel';
-import {
-  ISelectFormProps,
-  ISelectParamsOption,
-} from 'types/pages/params/components/SelectForm/SelectForm';
+import { ISelectFormProps } from 'types/pages/params/components/SelectForm/SelectForm';
+import { ISelectOption } from 'types/services/models/explorer/createAppModel';
 
 import getObjectPaths from 'utils/getObjectPaths';
 import { formatSystemMetricName } from 'utils/formatSystemMetricName';
@@ -38,6 +30,7 @@ import contextToString from 'utils/contextToString';
 import './SelectForm.scss';
 
 function SelectForm({
+  requestIsPending,
   onParamsSelectChange,
   selectedParamsData,
   onSelectRunQueryChange,
@@ -45,6 +38,7 @@ function SelectForm({
   const projectsData = useModel<IProjectsModelState>(projectsModel);
   const [anchorEl, setAnchorEl] = React.useState<any>(null);
   const searchRef = React.useRef<any>(null);
+  const paramsSuggestions = useParamsSuggestions();
 
   React.useEffect(() => {
     const paramsMetricsRequestRef = projectsModel.getProjectParams(['metric']);
@@ -57,26 +51,38 @@ function SelectForm({
 
   function handleParamsSearch(e: React.ChangeEvent<any>) {
     e.preventDefault();
+    if (requestIsPending) {
+      return;
+    }
     searchRef.current = paramsAppModel.getParamsData(true);
     searchRef.current.call();
   }
 
-  function onSelect(event: object, value: ISelectParamsOption[]): void {
+  function handleRequestAbort(e: React.SyntheticEvent): void {
+    e.preventDefault();
+    if (!requestIsPending) {
+      return;
+    }
+    searchRef.current?.abort();
+    paramsAppModel.abortRequest();
+  }
+
+  function onSelect(event: object, value: ISelectOption[]): void {
     const lookup = value.reduce(
-      (acc: { [key: string]: number }, curr: ISelectParamsOption) => {
+      (acc: { [key: string]: number }, curr: ISelectOption) => {
         acc[curr.label] = ++acc[curr.label] || 0;
         return acc;
       },
       {},
     );
     onParamsSelectChange(
-      value.filter((option: ISelectParamsOption) => lookup[option.label] === 0),
+      value.filter((option: ISelectOption) => lookup[option.label] === 0),
     );
   }
 
   function handleDelete(field: string): void {
-    let fieldData = [...selectedParamsData?.params].filter(
-      (opt: ISelectParamsOption) => opt.label !== field,
+    let fieldData = [...(selectedParamsData?.options || [])].filter(
+      (opt: ISelectOption) => opt.label !== field,
     );
     onParamsSelectChange(fieldData);
   }
@@ -95,22 +101,22 @@ function SelectForm({
     setAnchorEl(null);
   }
 
-  const paramsOptions: ISelectParamsOption[] = React.useMemo(() => {
-    let data: ISelectParamsOption[] = [];
-    const systemOptions: ISelectParamsOption[] = [];
+  const paramsOptions: ISelectOption[] = React.useMemo(() => {
+    let data: ISelectOption[] = [];
+    const systemOptions: ISelectOption[] = [];
     if (projectsData?.metrics) {
       for (let key in projectsData.metrics) {
         let system: boolean = isSystemMetric(key);
         for (let val of projectsData.metrics[key]) {
           let label = contextToString(val);
           let index: number = data.length;
-          let option: ISelectParamsOption = {
+          let option: ISelectOption = {
             label: `${system ? formatSystemMetricName(key) : key} ${label}`,
             group: system ? formatSystemMetricName(key) : key,
             type: 'metrics',
             color: COLORS[0][index % COLORS[0].length],
             value: {
-              param_name: key,
+              option_name: key,
               context: val,
             },
           };
@@ -141,6 +147,7 @@ function SelectForm({
 
   const open: boolean = !!anchorEl;
   const id = open ? 'select-metric' : undefined;
+
   return (
     <div className='SelectForm__container'>
       <div className='SelectForm__params__container'>
@@ -176,7 +183,7 @@ function SelectForm({
                     disablePortal
                     disableCloseOnSelect
                     options={paramsOptions}
-                    value={selectedParamsData?.params}
+                    value={selectedParamsData?.options}
                     onChange={onSelect}
                     groupBy={(option) => option.group}
                     getOptionLabel={(option) => option.label}
@@ -197,10 +204,10 @@ function SelectForm({
                       />
                     )}
                     renderOption={(option) => {
-                      let selected: boolean = !!selectedParamsData?.params.find(
-                        (item: ISelectParamsOption) =>
-                          item.label === option.label,
-                      )?.label;
+                      let selected: boolean =
+                        !!selectedParamsData?.options.find(
+                          (item: ISelectOption) => item.label === option.label,
+                        )?.label;
                       return (
                         <React.Fragment>
                           <Checkbox
@@ -222,63 +229,64 @@ function SelectForm({
                   orientation='vertical'
                   flexItem
                 />
-                {selectedParamsData?.params.length === 0 && (
+                {selectedParamsData?.options.length === 0 && (
                   <Text tint={50} size={14} weight={400}>
                     No params are selected
                   </Text>
                 )}
-                {selectedParamsData?.params.length > 0 && (
-                  <Box className='SelectForm__tags ScrollBar__hidden'>
-                    {selectedParamsData?.params?.map(
-                      (tag: ISelectParamsOption) => {
-                        return (
-                          <Badge
-                            size='large'
-                            key={tag.label}
-                            color={tag.color}
-                            label={tag.label}
-                            onDelete={handleDelete}
-                          />
-                        );
-                      },
-                    )}
-                  </Box>
-                )}
+                {selectedParamsData?.options &&
+                  selectedParamsData.options.length > 0 && (
+                    <Box className='SelectForm__tags ScrollBar__hidden'>
+                      {selectedParamsData?.options?.map(
+                        (tag: ISelectOption) => {
+                          return (
+                            <Badge
+                              size='large'
+                              key={tag.label}
+                              color={tag.color}
+                              label={tag.label}
+                              onDelete={handleDelete}
+                            />
+                          );
+                        },
+                      )}
+                    </Box>
+                  )}
               </Box>
-              {selectedParamsData?.params.length > 1 && (
-                <span
-                  onClick={() => onParamsSelectChange([])}
-                  className='SelectForm__clearAll'
-                >
-                  <Icon name='close' />
-                </span>
-              )}
+              {selectedParamsData?.options &&
+                selectedParamsData.options.length > 1 && (
+                  <span
+                    onClick={() => onParamsSelectChange([])}
+                    className='SelectForm__clearAll'
+                  >
+                    <Icon name='close' />
+                  </span>
+                )}
             </>
           </Box>
           <Button
             color='primary'
-            variant='contained'
-            startIcon={<SearchOutlined />}
+            variant={requestIsPending ? 'outlined' : 'contained'}
+            startIcon={
+              <Icon
+                name={requestIsPending ? 'close' : 'search'}
+                fontSize={requestIsPending ? 12 : 14}
+              />
+            }
             className='Params__SelectForm__search__button'
-            onClick={handleParamsSearch}
+            onClick={requestIsPending ? handleRequestAbort : handleParamsSearch}
           >
-            Search
+            {requestIsPending ? 'Cancel' : 'Search'}
           </Button>
         </Box>
-
-        <div className='Params__SelectForm__TextField'>
-          <form onSubmit={handleParamsSearch}>
-            <TextField
-              fullWidth
-              size='small'
-              variant='outlined'
-              spellCheck={false}
-              inputProps={{ style: { height: '0.687rem' } }}
-              placeholder='Filter runs, e.g. run.learning_rate > 0.0001 and run.batch_size == 32'
-              value={selectedParamsData?.query}
-              onChange={({ target }) => onSelectRunQueryChange(target.value)}
-            />
-          </form>
+        <div className='SelectForm__TextField'>
+          <ExpressionAutoComplete
+            onExpressionChange={onSelectRunQueryChange}
+            onSubmit={handleParamsSearch}
+            value={selectedParamsData?.query}
+            options={paramsSuggestions}
+            placeholder='Filter runs, e.g. run.learning_rate > 0.0001 and run.batch_size == 32'
+          />
         </div>
       </div>
     </div>
